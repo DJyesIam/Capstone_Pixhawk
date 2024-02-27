@@ -53,8 +53,7 @@ public:
 
 	enum class RegisterAddr : uint16_t
 	{
-    	// Initial Setting //
-    	/////////////////////
+    	// Initial Setting
 		RS485_NODE_ID = 0x2001,
     	OPR_MODE = 0x200D,
     	CONTROL_REG = 0x200E,
@@ -62,27 +61,22 @@ public:
     	L_MAX_CUR = 0x2034,
     	R_RATED_CUR = 0x2063,
     	R_MAX_CUR = 0x2064,
-    	/////////////////////
 
-    	// Contorl Parameters //
-    	////////////////////////
+    	// Contorl Parameters
 		SAVE_EEPROM = 0x2010,
     	MOTOR_MAX_RPM = 0x2008,
     	L_CMD_RPM = 0x2088,
     	R_CMD_RPM = 0x2089,
     	L_CMD_TOQ = 0x2090,
     	R_CMD_TOQ = 0x2091,
-    	////////////////////////
 
-    	// Read Only //
-    	///////////////
+    	// Read Only
     	DRIVER_VOL = 0x20A1,
     	DRIVER_TEMP = 0x20B0,
     	L_FB_RPM = 0x20AB,
     	R_FB_RPM = 0x20AC,
     	L_FB_TOQ = 0x20AD,
     	R_FB_TOQ = 0x20AE
-    	///////////////
 	};
 
 	enum class CMD : uint16_t
