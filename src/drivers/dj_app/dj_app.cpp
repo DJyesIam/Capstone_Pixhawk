@@ -1,10 +1,11 @@
 #include "dj_app.hpp"
 
 // 여기서부터 Run 함수까지는 roboclaw, pwm_out 함수를 참고하여 만든 코드라서 나도 정확히 이해하지 못함. 대강 이런 기능이겠구나 추측은 됨
+
 RS485::RS485() :
 	OutputModuleInterface(MODULE_NAME, px4::wq_configurations::ttyS3)
 {
-	PX4_INFO("Instance has constructed!\n");
+
 }
 
 RS485::~RS485()
@@ -12,7 +13,6 @@ RS485::~RS485()
 	close(_rs485_fd);
 	perf_free(_cycle_perf);
 	perf_free(_interval_perf);
-	PX4_INFO("Instance has destructed...\n");
 }
 
 int RS485::task_spawn(int argc, char *argv[])
@@ -82,6 +82,8 @@ void RS485::Run()
 	_actuator_armed_sub.update();
 	_mixing_output.updateSubscriptions(true);
 
+	readRegisters(&_rtu_front, 0x2001, 0x0001);
+
 	perf_end(_cycle_perf);
 }
 
@@ -100,7 +102,6 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		setMotorSpeed(&_rtu_front, 0, 1);
 		setMotorSpeed(&_rtu_back, 0, 0);
 		setMotorSpeed(&_rtu_back, 0, 1);
-
 	}
 	else
 	{
@@ -112,10 +113,6 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	return true;
 }
 
-// 이 밑에서부터 나올 모터드라이버에 값을 쓰는 과정은 다음과 같이 이루어진다.
-// 1. CRC를 제외한 RTU 패킷을 설정한다.(디바이스 주소, function code, 레지스터 주소, 데이터)
-// 2. 해당 패킷 값들로 CRC를 계산하고, RTU 패킷을 완성한다.
-// 3. 완성된 패킷을 write() 함수로 전송한다.
 void RS485::setMotorSpeed(RTU* rtu, uint16_t rpm, bool side)
 {
 	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
@@ -125,49 +122,35 @@ void RS485::setMotorSpeed(RTU* rtu, uint16_t rpm, bool side)
 	if (_motor_enabled_front != true && rtu->_device_address == 0x01) setMotorEnabled(rtu);
 	if (_motor_enabled_back != true && rtu->_device_address == 0x02) setMotorEnabled(rtu);
 
-	// side 매개변수에 따라 왼쪽 오른쪽 모터의 속도를 설정
-	if (side == 0) setRTUPacket(rtu, rtu->_device_address, 0x06, 0x2088, (uint8_t*)&rpm, sizeof(rpm));
-	if (side == 1) setRTUPacket(rtu, rtu->_device_address, 0x06, 0x2089, (uint8_t*)&rpm, sizeof(rpm));
-	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
-	writeData(*rtu);
-}
-
-void RS485::readEncoder()
-{
-
+	if (side == 0) writeSingleRegister(rtu, rtu->_device_address, 0x2088, (uint8_t*)&rpm, sizeof(rpm));
+	if (side == 1) writeSingleRegister(rtu, rtu->_device_address, 0x2089, (uint8_t*)&rpm, sizeof(rpm));
 }
 
 void RS485::setMotorMode(RTU* rtu, Mode mode)
 {
-	setRTUPacket(rtu, rtu->_device_address, 0x06, 0x200D, (uint8_t*)&mode, sizeof(mode));
-	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
 	if (rtu->_device_address == 0x01) _motor_mode_front = mode;
 	if (rtu->_device_address == 0x02) _motor_mode_back = mode;
-	writeData(*rtu);
+
+	writeSingleRegister(rtu, rtu->_device_address, 0x200D, (uint8_t*)&mode, sizeof(mode));
 }
 
 void RS485::setMotorEnabled(RTU *rtu)
 {
-	uint16_t enable = 0x0008;
-	setRTUPacket(rtu, rtu->_device_address, 0x06, 0x200E, (uint8_t*)&enable, sizeof(enable));
-	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
 	if (rtu->_device_address == 0x01) _motor_enabled_front = true;
 	if (rtu->_device_address == 0x02) _motor_enabled_back = true;
-	writeData(*rtu);
+	uint16_t enable = 0x0008;
+
+	writeSingleRegister(rtu, rtu->_device_address, 0x200E, (uint8_t*)&enable, sizeof(enable));
 }
 
 void RS485::setDeviceAddress(RTU* rtu, uint16_t address)
 {
 	// 주소 바꾸는 패킷 전송
-	setRTUPacket(rtu, rtu->_device_address, 0x06, 0x2001, (uint8_t*)&address, sizeof(address));
-	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
-	writeData(*rtu);
+	writeSingleRegister(rtu, rtu->_device_address, 0x2001, (uint8_t*)&address, sizeof(address));
 
 	// EEPROM에 저장하는 패킷 전송
 	uint16_t EEPROM_value = 0x0001;
-	setRTUPacket(rtu, rtu->_device_address, 0x06, 0x2010, (uint8_t*)&EEPROM_value, sizeof(EEPROM_value));
-	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
-	writeData(*rtu);
+	writeSingleRegister(rtu, rtu->_device_address, 0x2010, (uint8_t*)&EEPROM_value, sizeof(EEPROM_value));
 }
 
 // 시리얼 통신 파라미터 설정은 termios.h 을 통해서 한다.
@@ -175,7 +158,7 @@ void RS485::setDeviceAddress(RTU* rtu, uint16_t address)
 // 그리고 설정을 마친 다음 tcsetattr() 함수로 디스크립터(_rs485_fd)에 설정 내용을 저장하는 방식인 듯 하다.
 ssize_t RS485::initializeRS485()
 {
-	_rs485_fd = open(_port_name, O_RDWR | O_NOCTTY);	// rs485 디스크립터를 연다.
+	_rs485_fd = open(_port_name, O_RDWR | O_NOCTTY | O_NONBLOCK);	// rs485 디스크립터를 연다.
 	if (_rs485_fd < 0) return ERROR;
 
 	ssize_t ret = 0;
@@ -198,8 +181,6 @@ ssize_t RS485::initializeRS485()
 	tcflush(_rs485_fd, TCIFLUSH);		// 디스크립터 초기화
 	ret = tcsetattr(_rs485_fd, TCSANOW, &rs485_config);	// termios 구조체 설정을 디스크립터에 저장
 	if (ret < 0) return ERROR;
-
-	PX4_INFO("Successfully connected!\n");
 	return OK;
 }
 
@@ -233,22 +214,40 @@ uint16_t RS485::calculateCRC(uint8_t *data, size_t data_length)
 	return crc;
 }
 
-void RS485::writeData(RTU rtu)
+void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length)
 {
-	write(_rs485_fd, &rtu, sizeof(rtu));
-	usleep(4000);	// 현재 delay를 주지 않으면 값 전송이 제대로 안 됨.
+	setRTUPacket(rtu, device_address, 0x06, register_address, data, data_length);	// CRC를 제외한 RTU 패킷 설정
+	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);					// CRC 계산하여 RTU 패킷 완성
+	write(_rs485_fd, rtu, sizeof(*rtu));						// RTU 패킷 전송
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+
+	// function code 0x06으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
+	uint8_t buf[8];
+	read(_rs485_fd, &buf, sizeof(buf));
 }
 
-uint16_t RS485::readData(RTU rtu)
+void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register_number)
 {
-	uint16_t buf;
-	writeData(rtu);
+	setRTUPacket(rtu, rtu->_device_address, 0x03, register_address, (uint8_t*)&register_number, sizeof(register_number));
+	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
+	write(_rs485_fd, rtu, sizeof(*rtu));
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+
+	static uint8_t buf[9];
 	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));
-	if (ret < 0) return 0;
-	return buf;
+	if (ret <= 0) return;
+	_read_buf_address = buf + 3;
 }
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 {
 	return RS485::main(argc, argv);
+
+	// RS485 rs485;
+	// rs485.initializeRS485();
+
+	// rs485.readRegisters(&rs485._rtu_front, 0x2001, 0x0002);
+	// printf("First data: %.2x%.2x\n", rs485._read_buf_address[0], rs485._read_buf_address[1]);
+	// printf("Second data : %.2x%.2x\n", rs485._read_buf_address[2], rs485._read_buf_address[3]);
+	// return 0;
 }
