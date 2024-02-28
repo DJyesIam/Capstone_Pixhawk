@@ -82,8 +82,6 @@ void RS485::Run()
 	_actuator_armed_sub.update();
 	_mixing_output.updateSubscriptions(true);
 
-	readRegisters(&_rtu_front, 0x2001, 0x0001);
-
 	perf_end(_cycle_perf);
 }
 
@@ -98,59 +96,157 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 {
 	if (stop_motors)
 	{
-		setMotorSpeed(&_rtu_front, 0, 0);
-		setMotorSpeed(&_rtu_front, 0, 1);
-		setMotorSpeed(&_rtu_back, 0, 0);
-		setMotorSpeed(&_rtu_back, 0, 1);
+		setRpm(&_rtu_front, &_driver_front, 0, 0);
+		setRpm(&_rtu_back, &_driver_back, 0, 0);
 	}
 	else
 	{
-		setMotorSpeed(&_rtu_front, outputs[1], 0);
-		setMotorSpeed(&_rtu_front, -outputs[0], 1);
-		setMotorSpeed(&_rtu_back, outputs[1], 0);
-		setMotorSpeed(&_rtu_back, -outputs[0], 1);
+		setRpm(&_rtu_front, &_driver_front, outputs[1], -outputs[0]);
+		setRpm(&_rtu_back, &_driver_back, outputs[1], -outputs[0]);
 	}
 	return true;
 }
 
-void RS485::setMotorSpeed(RTU* rtu, uint16_t rpm, bool side)
+double RS485::rpmToRadPerSec(double rpm)
+{
+	return rpm*2*PI/60.0;
+}
+
+double RS485::rpmToLinear(double rpm)
+{
+	double w_wheel = rpmToRadPerSec(rpm);
+	double v = w_wheel*_r_wheel;
+	return v;
+}
+
+void RS485::setMode(RTU* rtu, DriverState* driver, Mode mode)
+{
+	driver->mode = mode;
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
+}
+
+Mode RS485::getMode(RTU* rtu)
+{
+	readRegisters(rtu, RegisterAddr::OPR_MODE, 1);
+	Mode mode = static_cast<Mode>((_read_buf_address[0] << 8) | _read_buf_address[1]);
+	return mode;
+}
+
+void RS485::enableMotor(RTU *rtu, DriverState* driver)
+{
+	driver->enabled = true;
+	uint16_t enable = CMD::ENABLE;
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
+}
+
+void RS485::emergencyStopMotor(RTU *rtu, DriverState* driver)
+{
+	driver->enabled = false;
+	uint16_t emergency_stop = CMD::EMER_STOP;
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&emergency_stop, sizeof(emergency_stop));
+}
+
+void RS485::clearAlarm(RTU *rtu)
+{
+	uint16_t alarm = CMD::ALRM_CLR;
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&alarm, sizeof(alarm));
+}
+
+void RS485::setRpm(RTU* rtu, DriverState* driver, uint16_t L_rpm, uint16_t R_rpm)
 {
 	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
-	if (_motor_mode_front != Mode::Velocity && rtu->_device_address == 0x01) setMotorMode(rtu, Mode::Velocity);
-	if (_motor_mode_back != Mode::Velocity && rtu->_device_address == 0x02) setMotorMode(rtu, Mode::Velocity);
+	if (driver->mode != Mode::VELOCITY) setMode(rtu, driver, Mode::VELOCITY);
 	// 모터드라이버가 enable 상태가 아니면 enable 설정
-	if (_motor_enabled_front != true && rtu->_device_address == 0x01) setMotorEnabled(rtu);
-	if (_motor_enabled_back != true && rtu->_device_address == 0x02) setMotorEnabled(rtu);
+	if (driver->enabled != true) enableMotor(rtu, driver);
 
-	if (side == 0) writeSingleRegister(rtu, rtu->_device_address, 0x2088, (uint8_t*)&rpm, sizeof(rpm));
-	if (side == 1) writeSingleRegister(rtu, rtu->_device_address, 0x2089, (uint8_t*)&rpm, sizeof(rpm));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_RPM, (uint8_t*)&L_rpm, sizeof(L_rpm));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_RPM, (uint8_t*)&R_rpm, sizeof(R_rpm));
 }
 
-void RS485::setMotorMode(RTU* rtu, Mode mode)
+void RS485::getRpm(RTU* rtu, DriverState* driver)
 {
-	if (rtu->_device_address == 0x01) _motor_mode_front = mode;
-	if (rtu->_device_address == 0x02) _motor_mode_back = mode;
-
-	writeSingleRegister(rtu, rtu->_device_address, 0x200D, (uint8_t*)&mode, sizeof(mode));
+	readRegisters(rtu, RegisterAddr::L_FB_RPM, 2);
+	driver->L_rpm = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	driver->R_rpm = ((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
 }
 
-void RS485::setMotorEnabled(RTU *rtu)
+void RS485::getLinearVelocities(RTU* rtu, DriverState* driver)
 {
-	if (rtu->_device_address == 0x01) _motor_enabled_front = true;
-	if (rtu->_device_address == 0x02) _motor_enabled_back = true;
-	uint16_t enable = 0x0008;
-
-	writeSingleRegister(rtu, rtu->_device_address, 0x200E, (uint8_t*)&enable, sizeof(enable));
+	getRpm(rtu, driver);
+	driver->L_vel = rpmToLinear(driver->L_rpm);
+	driver->R_vel = rpmToLinear(driver->R_rpm);
 }
 
-void RS485::setDeviceAddress(RTU* rtu, uint16_t address)
+void RS485::setTorque(RTU* rtu, DriverState* driver, uint16_t L_toq, uint16_t R_toq)
+{
+	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
+	if (driver->mode != Mode::TORQUE) setMode(rtu, driver, Mode::TORQUE);
+	// 모터드라이버가 enable 상태가 아니면 enable 설정
+	if (driver->enabled != true) enableMotor(rtu, driver);
+
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_TOQ, (uint8_t*)&L_toq, sizeof(L_toq));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_TOQ, (uint8_t*)&R_toq, sizeof(R_toq));
+}
+
+void RS485::getTorque(RTU* rtu, DriverState* driver)
+{
+	readRegisters(rtu, RegisterAddr::L_FB_TOQ, 2);
+	driver->L_toq = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	driver->R_toq = ((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
+}
+
+void RS485::setMaxRpm(RTU* rtu, uint16_t max_rpm)
+{
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::MOTOR_MAX_RPM, (uint8_t*)&max_rpm, sizeof(max_rpm));
+}
+
+void RS485::setRpmWToq(RTU* rtu, DriverState* driver, uint16_t cmd_rpm)
+{
+
+}
+
+void RS485::setMaxLCurrent(RTU* rtu, uint16_t max_cur)
+{
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_MAX_CUR, (uint8_t*)&max_cur, sizeof(max_cur));
+}
+
+void RS485::setMaxRCurrent(RTU* rtu, uint16_t max_cur)
+{
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_MAX_CUR, (uint8_t*)&max_cur, sizeof(max_cur));
+}
+
+void RS485::setRatedLCurrent(RTU* rtu, uint16_t rated_cur)
+{
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_RATED_CUR, (uint8_t*)&rated_cur, sizeof(rated_cur));
+}
+
+void RS485::setRatedRCurrent(RTU* rtu, uint16_t rated_cur)
+{
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_RATED_CUR, (uint8_t*)&rated_cur, sizeof(rated_cur));
+}
+
+double RS485::getVoltage(RTU* rtu)
+{
+	readRegisters(rtu, RegisterAddr::DRIVER_VOL, 1);
+	double voltage = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 100.0;
+	return voltage;
+}
+
+double RS485::getDriverTemp(RTU* rtu)
+{
+	readRegisters(rtu, RegisterAddr::DRIVER_TEMP, 1);
+	double temperature = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	return temperature;
+}
+
+void RS485::setNodeID(RTU* rtu, uint16_t address)
 {
 	// 주소 바꾸는 패킷 전송
-	writeSingleRegister(rtu, rtu->_device_address, 0x2001, (uint8_t*)&address, sizeof(address));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::RS485_NODE_ID, (uint8_t*)&address, sizeof(address));
 
 	// EEPROM에 저장하는 패킷 전송
 	uint16_t EEPROM_value = 0x0001;
-	writeSingleRegister(rtu, rtu->_device_address, 0x2010, (uint8_t*)&EEPROM_value, sizeof(EEPROM_value));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::SAVE_EEPROM, (uint8_t*)&EEPROM_value, sizeof(EEPROM_value));
 }
 
 // 시리얼 통신 파라미터 설정은 termios.h 을 통해서 한다.
@@ -186,7 +282,7 @@ ssize_t RS485::initializeRS485()
 
 void RS485::setRTUPacket(RTU *rtu, uint8_t device_address, uint8_t function_code, uint16_t register_address, uint8_t* data, size_t data_length)
 {
-	rtu->_device_address = device_address;
+	rtu->_node_id = device_address;
 	rtu->_function_code = function_code;
 	rtu->_register_address_high = register_address >> 8;
 	rtu->_register_address_low = register_address & 0xFF;
@@ -228,15 +324,15 @@ void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t regis
 
 void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register_number)
 {
-	setRTUPacket(rtu, rtu->_device_address, 0x03, register_address, (uint8_t*)&register_number, sizeof(register_number));
+	setRTUPacket(rtu, rtu->_node_id, 0x03, register_address, (uint8_t*)&register_number, sizeof(register_number));
 	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
 	write(_rs485_fd, rtu, sizeof(*rtu));
 	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
 
-	static uint8_t buf[9];
-	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));
+	static uint8_t buf[9];					// 수신 값을 저장할 버퍼(2개를 읽으면 9바이트가 들어오므로 배열의 길이를 9로 설정함.)
+	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));	// read 함수로 읽는다.(ret에는 읽은 바이트 수가 저장됨.)
 	if (ret <= 0) return;
-	_read_buf_address = buf + 3;
+	_read_buf_address = buf + 3;		// buf+3에 해당하는 주소는 우리가 원하는 데이터가 있는 주소이다.
 }
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
@@ -246,8 +342,8 @@ extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 	// RS485 rs485;
 	// rs485.initializeRS485();
 
-	// rs485.readRegisters(&rs485._rtu_front, 0x2001, 0x0002);
-	// printf("First data: %.2x%.2x\n", rs485._read_buf_address[0], rs485._read_buf_address[1]);
-	// printf("Second data : %.2x%.2x\n", rs485._read_buf_address[2], rs485._read_buf_address[3]);
+	// rs485.setMode(&rs485._rtu_front, &rs485._driver_front, Mode::VELOCITY);
+	// double voltage = rs485.getVoltage(&rs485._rtu_front);
+	// PX4_INFO("%.4f\n", voltage);
 	// return 0;
 }
