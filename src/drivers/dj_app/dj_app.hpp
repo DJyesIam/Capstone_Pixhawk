@@ -112,21 +112,15 @@ public:
 	DriverState _driver_back{0x02};
 
 	double _r_wheel;
-	double L_front_rpm, R_front_rpm;		// 앞바퀴 모터드라이버의 좌, 우 모터 rpm
-	double L_back_rpm, R_back_rpm;			// 뒷바퀴 모터드라이버의 좌, 우 모터 rpm
-	double L_front_vel, R_front_vel;		// 앞바퀴 모터드라이버의 좌, 우 모터 선속도
-	double L_back_vel, R_back_vel;			// 뒷바퀴 모터드라이버의 좌, 우 모터 선속도
-	double L_front_toq, R_front_toq;		// 앞바퀴 모터드라이버의 좌, 우 모터 토크
-	double L_back_toq, R_back_toq;			// 뒷바퀴 모터드라이버의 좌, 우 모터 토크
 
-	double rpmToRadPerSec(double rpm);			// rev/m 값을 rad/s로 변환
-	double rpmToLinear(double rpm);				// rpm 값을 선속도 값으로 변환
+	double rpmToRadPerSec(double rpm);						// rev/m 값을 rad/s로 변환
+	double rpmToLinear(double rpm);							// rpm 값을 선속도 값으로 변환
 
-	void setMode(RTU* rtu, DriverState* driver, Mode mode);			// 모터드라이버 모드 설정
-	Mode getMode(RTU* rtu);					// 모터드라이버 모드 읽기
+	void setMode(RTU* rtu, DriverState* driver, Mode mode);				// 모터드라이버 모드 설정
+	Mode getMode(RTU* rtu);								// 모터드라이버 모드 읽기
 	void enableMotor(RTU* rtu, DriverState* driver);				// 모터드라이버 enable로 설정
-	void emergencyStopMotor(RTU* rtu, DriverState* driver);			// 모터드라이버 emergency stop 시키기
-	void clearAlarm(RTU* rtu);				// 모터드라이비 clear fault
+	void emergencyStopMotor(RTU* rtu, DriverState* driver);				// 모터드라이버 emergency stop 시키기
+	void clearAlarm(RTU* rtu);							// 모터드라이버 clear fault
 
 	void setRpm(RTU* rtu, DriverState* driver, uint16_t L_rpm, uint16_t R_rpm);	// 두 모터의 target rpm을 받아 모터 속도 설정
 	void getRpm(RTU* rtu, DriverState* driver);					// 두 모터의 rpm 읽기
@@ -135,26 +129,26 @@ public:
 	void setTorque(RTU* rtu, DriverState* driver, uint16_t L_toq, uint16_t R_toq);	// 두 모터의 target 토크를 받아 모터 토크 설정
 	void getTorque(RTU* rtu, DriverState* driver);					// 두 모터의 토크 읽기
 
-	void setMaxRpm(RTU* rtu, uint16_t max_rpm);			// 모터드라이버의 최대 rpm 설정
+	void setMaxRpm(RTU* rtu, uint16_t max_rpm);					// 모터드라이버의 최대 rpm 설정
 	void setRpmWToq(RTU* rtu, DriverState* driver, uint16_t cmd_rpm);
 
-	void setMaxLCurrent(RTU* rtu, uint16_t max_cur);		// 좌측 모터 최대 제한전류 설정
-	void setMaxRCurrent(RTU* rtu, uint16_t max_cur);		// 우측 모터 최대 제한전류 설정
-	void setRatedLCurrent(RTU* rtu, uint16_t rated_cur);		// 좌측 모터 정격전류 설정
-	void setRatedRCurrent(RTU* rtu, uint16_t rated_cur);		// 우측 모터 정격전류 설정
+	void setMaxLCurrent(RTU* rtu, uint16_t max_cur);				// 좌측 모터 최대 제한전류 설정
+	void setMaxRCurrent(RTU* rtu, uint16_t max_cur);				// 우측 모터 최대 제한전류 설정
+	void setRatedLCurrent(RTU* rtu, uint16_t rated_cur);				// 좌측 모터 정격전류 설정
+	void setRatedRCurrent(RTU* rtu, uint16_t rated_cur);				// 우측 모터 정격전류 설정
 
-	double getVoltage(RTU* rtu);					// 모터드라이버 인가전압 읽기
-	double getDriverTemp(RTU* rtu);					// 모터드라이버 온도 읽기
+	double getVoltage(RTU* rtu);							// 모터드라이버 인가전압 읽기
+	double getDriverTemp(RTU* rtu);							// 모터드라이버 온도 읽기
 
-	void setNodeID(RTU* rtu, uint16_t address);	// 모터드라이버 Node ID 새로 설정(주행중에는 사용하지 말 것)
+	void setNodeID(RTU* rtu, uint16_t address);					// 모터드라이버 Node ID 새로 설정(주행중에는 사용하지 말 것)
 
 	// 아마 얘가 실질적으로 모터를 돌리는 인스턴스로 추측된다.
 	MixingOutput _mixing_output{"DJ", MAX_ACTUATORS, *this, MixingOutput::SchedulingPolicy::Auto, true};
 	/* =====================================================================================================================*/
 
 	/* =============================================== 통신 관련 변수, 함수들 ==================================================*/
-	RTU _rtu_front{0x01};	// 앞바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 왼쪽 모터드라이버)
-	RTU _rtu_back{0x02};	// 뒷바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 오른쪽 모터드라이버)
+	RTU _rtu_front{0x01};			// 앞바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 왼쪽 모터드라이버)
+	RTU _rtu_back{0x02};			// 뒷바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 오른쪽 모터드라이버)
 
 	const char* _port_name = "/dev/ttyS3";	// 디바이스 포트 이름(pixhawk UART 포트이름이 dev/ttyS3)
 	const int _baudrate = B115200;		// baudrate(모터드라이브의 default가 115200)
