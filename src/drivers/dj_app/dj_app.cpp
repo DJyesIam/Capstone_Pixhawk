@@ -202,7 +202,57 @@ void RS485::setMaxRpm(RTU* rtu, uint16_t max_rpm)
 
 void RS485::setRpmWToq(RTU* rtu, DriverState* driver, uint16_t cmd_rpm)
 {
+	if (cmd_rpm == PARAM::CMD_RPM) {return 0;}
+	else {PARAM::CMD_RPM = cmd_rpm;}
 
+	toq = PARAM::RATED_TORQUE;
+
+	getRpm(rtu, driver);
+
+	if (PARAM::CMD_RPM == 0){
+		if (driver->R_rpm > 0){
+			setTorque(rtu, driver, -PARAM::RATED_TORQUE, -PARAM::RATED_TORQUE);
+			while (drvier->R_rpm > PARAM::CMD_RPM){
+				getRpm(rtu, driver);
+			}
+			setTorque(rtu, driver, 0, 0);
+		}
+
+		else if (driver->R_rpm < 0){
+			setTorque(rtu, driver, PARAM::RATED_TORQUE, PARAM:: RATED_TORQUE);
+			while (driver->R_rpm < PARAM::CMD_RPM){
+				getRpm(rtu, driver);
+			}
+			setTorque(rtu, driver, 0, 0);
+		}
+
+		else{
+			setTorque(rtu, driver, 0, 0);
+		}
+	}
+
+	else if (PARAM::CMD_RPM * (driver->R_rpm + 0.01)){
+		toq = (PARAM::CMD_RPM > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
+		if (abs(PARAM::CMD_RPM) >= abs(driver->R_rpm)){
+			setMaxRpm(rtu, abs(PARAM::CMD_RPM));
+			setTorque(rtu, driver, toq, toq);
+		}
+
+		else{
+			setMaxRpm(rtu, abs(PARAM::CMD_RPM));
+			setTorque(rtu, driver, -toq, -toq);
+			while (abs(driver->R_rpm) >= (PARAM::CMD_RPM + 20)){ // 20 is margin rpm
+				getRpm(rtu, driver);
+			}
+			setTorque(rtu, driver, toq, toq);
+		}
+	}
+
+	else if (PARAM::CMD_RPM * (driver->R_rpm + 0.01)){
+		toq = (PARAM::CMD_RPM > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
+		setMaxRpm(rtu, abs(PARAM::CMD_RPM));
+		setTorque(rtu, driver, toq, toq);
+	}
 }
 
 void RS485::setMaxLCurrent(RTU* rtu, uint16_t max_cur)

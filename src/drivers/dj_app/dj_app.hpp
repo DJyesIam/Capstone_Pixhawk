@@ -60,9 +60,9 @@ enum CMD : uint16_t
 
 enum PARAM : uint16_t
 {
-	MAX_TORQUE,
-	RATED_TORQUE,
-	CMD_RPM
+	MAX_TORQUE = 13000, // mA
+	RATED_TORQUE = 6000, // mA
+	CMD_RPM = 0 // rpm
 };
 
 struct RTU	// Modbus RTU 통신에서 주고받는 패킷을 구조체로 추상화(일단은 단일 레지스터, 단일 데이터만 주고받을 수 있는 패킷)
