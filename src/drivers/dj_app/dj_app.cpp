@@ -107,6 +107,22 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	return true;
 }
 
+///////// Assume front->left, back->right
+// bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
+// 				unsigned num_outputs, unsigned num_control_groups_updated)
+// {
+// 	if (stop_motors)
+// 	{
+// 		setRpmWToq(&_rtu_front, &_driver_front, 0);
+// 		setRpmWToq(&_rtu_back, &_driver_back, 0);
+// 	}
+// 	else
+// 	{
+// 		setRpmWToq(&_rtu_front, &_driver_front, outputs[1]);
+// 		setRpmWToq(&_rtu_back, &_driver_back, outputs[0]);
+// 	}
+// }
+
 double RS485::rpmToRadPerSec(double rpm)
 {
 	return rpm*2*PI/60.0;
