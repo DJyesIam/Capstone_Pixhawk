@@ -104,6 +104,9 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
 		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
+		outputs[0] -= 50;
+		outputs[1] -= 50;
+
 		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
 		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 	}
