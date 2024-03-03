@@ -96,13 +96,16 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 {
 	if (stop_motors)
 	{
-		setRpm(&_rtu_front, &_driver_front, 0, 0);
-		setRpm(&_rtu_back, &_driver_back, 0, 0);
+		setRpm(&_rtu_left, &_driver_left, 0);
+		setRpm(&_rtu_right, &_driver_right, 0);
 	}
 	else
 	{
-		setRpm(&_rtu_front, &_driver_front, outputs[1], -outputs[0]);
-		setRpm(&_rtu_back, &_driver_back, outputs[1], -outputs[0]);
+		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
+		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
+
+		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
+		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 	}
 	return true;
 }
@@ -135,39 +138,41 @@ Mode RS485::getMode(RTU* rtu)
 void RS485::enableMotor(RTU *rtu, DriverState* driver)
 {
 	driver->enabled = true;
-	uint16_t enable = CMD::ENABLE;
+	uint16_t enable = RegisterAddr::ENABLE;
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 }
 
 void RS485::emergencyStopMotor(RTU *rtu, DriverState* driver)
 {
 	driver->enabled = false;
-	uint16_t emergency_stop = CMD::EMER_STOP;
+	uint16_t emergency_stop = RegisterAddr::EMER_STOP;
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&emergency_stop, sizeof(emergency_stop));
 }
 
 void RS485::clearAlarm(RTU *rtu)
 {
-	uint16_t alarm = CMD::ALRM_CLR;
+	uint16_t alarm = RegisterAddr::ALRM_CLR;
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&alarm, sizeof(alarm));
 }
 
-void RS485::setRpm(RTU* rtu, DriverState* driver, uint16_t L_rpm, uint16_t R_rpm)
+void RS485::setRpm(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
 {
 	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
 	if (driver->mode != Mode::VELOCITY) setMode(rtu, driver, Mode::VELOCITY);
 	// 모터드라이버가 enable 상태가 아니면 enable 설정
 	if (driver->enabled != true) enableMotor(rtu, driver);
 
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_RPM, (uint8_t*)&L_rpm, sizeof(L_rpm));
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_RPM, (uint8_t*)&R_rpm, sizeof(R_rpm));
+	driver->cmd_rpm = cmd_rpm;
+
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_RPM, (uint8_t*)&cmd_rpm, sizeof(cmd_rpm));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_RPM, (uint8_t*)&cmd_rpm, sizeof(cmd_rpm));
 }
 
 void RS485::getRpm(RTU* rtu, DriverState* driver)
 {
 	readRegisters(rtu, RegisterAddr::L_FB_RPM, 2);
-	driver->L_rpm = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
-	driver->R_rpm = ((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
+	driver->L_rpm = (int16_t)((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	driver->R_rpm = (int16_t)((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
 }
 
 void RS485::getLinearVelocities(RTU* rtu, DriverState* driver)
@@ -177,22 +182,22 @@ void RS485::getLinearVelocities(RTU* rtu, DriverState* driver)
 	driver->R_vel = rpmToLinear(driver->R_rpm);
 }
 
-void RS485::setTorque(RTU* rtu, DriverState* driver, uint16_t L_toq, uint16_t R_toq)
+void RS485::setTorque(RTU* rtu, DriverState* driver, int16_t toq)
 {
 	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
 	if (driver->mode != Mode::TORQUE) setMode(rtu, driver, Mode::TORQUE);
 	// 모터드라이버가 enable 상태가 아니면 enable 설정
 	if (driver->enabled != true) enableMotor(rtu, driver);
 
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_TOQ, (uint8_t*)&L_toq, sizeof(L_toq));
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_TOQ, (uint8_t*)&R_toq, sizeof(R_toq));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_TOQ, (uint8_t*)&toq, sizeof(toq));
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_TOQ, (uint8_t*)&toq, sizeof(toq));
 }
 
 void RS485::getTorque(RTU* rtu, DriverState* driver)
 {
 	readRegisters(rtu, RegisterAddr::L_FB_TOQ, 2);
-	driver->L_toq = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
-	driver->R_toq = ((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
+	driver->L_toq = (int16_t)((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	driver->R_toq = (int16_t)((_read_buf_address[2] << 8) | _read_buf_address[3]) / 10.0;
 }
 
 void RS485::setMaxRpm(RTU* rtu, uint16_t max_rpm)
@@ -200,58 +205,58 @@ void RS485::setMaxRpm(RTU* rtu, uint16_t max_rpm)
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::MOTOR_MAX_RPM, (uint8_t*)&max_rpm, sizeof(max_rpm));
 }
 
-void RS485::setRpmWToq(RTU* rtu, DriverState* driver, uint16_t cmd_rpm)
+void RS485::setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
 {
-	if (cmd_rpm == PARAM::CMD_RPM) {return 0;}
-	else {PARAM::CMD_RPM = cmd_rpm;}
+	if (cmd_rpm == driver->cmd_rpm) return;
+	else driver->cmd_rpm = cmd_rpm;
 
-	toq = PARAM::RATED_TORQUE;
+	int16_t toq = PARAM::RATED_TORQUE;
 
 	getRpm(rtu, driver);
 
-	if (PARAM::CMD_RPM == 0){
+	if (driver->cmd_rpm == 0){
 		if (driver->R_rpm > 0){
-			setTorque(rtu, driver, -PARAM::RATED_TORQUE, -PARAM::RATED_TORQUE);
-			while (drvier->R_rpm > PARAM::CMD_RPM){
+			setTorque(rtu, driver, -toq);
+			while (driver->R_rpm > driver->cmd_rpm){
 				getRpm(rtu, driver);
 			}
-			setTorque(rtu, driver, 0, 0);
+			setTorque(rtu, driver, 0);
 		}
 
 		else if (driver->R_rpm < 0){
-			setTorque(rtu, driver, PARAM::RATED_TORQUE, PARAM:: RATED_TORQUE);
-			while (driver->R_rpm < PARAM::CMD_RPM){
+			setTorque(rtu, driver, toq);
+			while (driver->R_rpm < driver->cmd_rpm){
 				getRpm(rtu, driver);
 			}
-			setTorque(rtu, driver, 0, 0);
+			setTorque(rtu, driver, 0);
 		}
 
 		else{
-			setTorque(rtu, driver, 0, 0);
+			setTorque(rtu, driver, 0);
 		}
 	}
 
-	else if (PARAM::CMD_RPM * (driver->R_rpm + 0.01)){
-		toq = (PARAM::CMD_RPM > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
-		if (abs(PARAM::CMD_RPM) >= abs(driver->R_rpm)){
-			setMaxRpm(rtu, abs(PARAM::CMD_RPM));
-			setTorque(rtu, driver, toq, toq);
+	else if (driver->cmd_rpm * (driver->R_rpm) > 0){
+		toq = (driver->cmd_rpm > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
+		if (abs(driver->cmd_rpm) >= abs(driver->R_rpm)){
+			setMaxRpm(rtu, abs(driver->cmd_rpm));
+			setTorque(rtu, driver, toq);
 		}
 
 		else{
-			setMaxRpm(rtu, abs(PARAM::CMD_RPM));
-			setTorque(rtu, driver, -toq, -toq);
-			while (abs(driver->R_rpm) >= (PARAM::CMD_RPM + 20)){ // 20 is margin rpm
+			setMaxRpm(rtu, abs(driver->cmd_rpm));
+			setTorque(rtu, driver, -toq);
+			while (abs(driver->R_rpm) >= (abs(driver->cmd_rpm) + 20)){ // 20 is margin rpm
 				getRpm(rtu, driver);
 			}
-			setTorque(rtu, driver, toq, toq);
+			setTorque(rtu, driver, toq);
 		}
 	}
 
-	else if (PARAM::CMD_RPM * (driver->R_rpm + 0.01)){
-		toq = (PARAM::CMD_RPM > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
-		setMaxRpm(rtu, abs(PARAM::CMD_RPM));
-		setTorque(rtu, driver, toq, toq);
+	else if (driver->cmd_rpm * (driver->R_rpm) <= 0){
+		toq = (driver->cmd_rpm > 0) ? PARAM::RATED_TORQUE : -PARAM::RATED_TORQUE;
+		setMaxRpm(rtu, abs(driver->cmd_rpm));
+		setTorque(rtu, driver, toq);
 	}
 }
 
@@ -275,18 +280,18 @@ void RS485::setRatedRCurrent(RTU* rtu, uint16_t rated_cur)
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_RATED_CUR, (uint8_t*)&rated_cur, sizeof(rated_cur));
 }
 
-double RS485::getVoltage(RTU* rtu)
+void RS485::getVoltage(RTU* rtu, DriverState* driver)
 {
 	readRegisters(rtu, RegisterAddr::DRIVER_VOL, 1);
 	double voltage = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 100.0;
-	return voltage;
+	driver->voltage = voltage;
 }
 
-double RS485::getDriverTemp(RTU* rtu)
+void RS485::getDriverTemp(RTU* rtu, DriverState* driver)
 {
 	readRegisters(rtu, RegisterAddr::DRIVER_TEMP, 1);
-	double temperature = ((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
-	return temperature;
+	double temperature = (int16_t)((_read_buf_address[0] << 8) | _read_buf_address[1]) / 10.0;
+	driver->temperature = temperature;
 }
 
 void RS485::setNodeID(RTU* rtu, uint16_t address)
@@ -391,9 +396,9 @@ extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 
 	// RS485 rs485;
 	// rs485.initializeRS485();
+	// while(1)
+	// {
 
-	// rs485.setMode(&rs485._rtu_front, &rs485._driver_front, Mode::VELOCITY);
-	// double voltage = rs485.getVoltage(&rs485._rtu_front);
-	// PX4_INFO("%.4f\n", voltage);
+	// }
 	// return 0;
 }
