@@ -94,10 +94,29 @@ void RS485::Run()
 bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 			   unsigned num_outputs, unsigned num_control_groups_updated)
 {
+	// EDIT & TODO
+	// 엄청 간단하게 임시로 짜놓은 데드존 코드
+	// 제대로 짤려면 #include <uORB/topics/vehicle_control_mode.h> 하고
+	// if (_vehicle_control_mode_sub.updated()) {
+	// 	vehicle_control_mode_s vehicle_control_mode{};
+
+	// 	if (_vehicle_control_mode_sub.copy(&vehicle_control_mode)) {
+	// 		_manual_driving = vehicle_control_mode.flag_control_manual_enabled;
+	// 		_mission_driving = vehicle_control_mode.flag_control_auto_enabled;
+	// 	}
+	// }
+	// 이거 응용해서 if(!_manual_drivind){} 이런식으로 구현해야 할 듯
+	if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
+    if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
+	//
+
 	if (stop_motors)
 	{
-		setRpm(&_rtu_left, &_driver_left, 0);
-		setRpm(&_rtu_right, &_driver_right, 0);
+		// setRpm(&_rtu_left, &_driver_left, 0);
+		// setRpm(&_rtu_right, &_driver_right, 0);
+
+		setRpmWToq(&_rtu_left, &_driver_left, 0, 15);
+		setRpmWToq(&_rtu_right, &_driver_right, 0, 20);
 	}
 	else
 	{
@@ -107,8 +126,8 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		outputs[0] -= 50;
 		outputs[1] -= 50;
 
-		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
-		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
+		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 15);
+		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
 	}
 	return true;
 }
@@ -187,7 +206,7 @@ void RS485::getLinearVelocities(RTU* rtu, DriverState* driver)
 
 void RS485::setTorque(RTU* rtu, DriverState* driver, int16_t toq)
 {
-	// 모터드라이버가 속도 모드가 아니면 속도 모드로 설정
+	// 모터드라이버가 토크 모드가 아니면 토크 모드로 설정
 	if (driver->mode != Mode::TORQUE) setMode(rtu, driver, Mode::TORQUE);
 	// 모터드라이버가 enable 상태가 아니면 enable 설정
 	if (driver->enabled != true) enableMotor(rtu, driver);
@@ -208,10 +227,13 @@ void RS485::setMaxRpm(RTU* rtu, uint16_t max_rpm)
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::MOTOR_MAX_RPM, (uint8_t*)&max_rpm, sizeof(max_rpm));
 }
 
-void RS485::setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
+
+// EDIT 좌우 마진을 다르게 줘보고 싶어서 수정함.
+// 이전 버전으로 돌릴려면 margin 지우고 함수 안에 값들 상수로 넣어줘
+void RS485::setRpmWToq(RTU* rtu, DriverState* driver, int16_t CMD_Rpm, int16_t margin)
 {
-	if (cmd_rpm == driver->cmd_rpm) return;
-	else driver->cmd_rpm = cmd_rpm;
+	if (CMD_Rpm == driver->cmd_rpm) return;
+	else driver->cmd_rpm = CMD_Rpm;
 
 	int16_t toq = PARAM::RATED_TORQUE;
 
@@ -219,24 +241,28 @@ void RS485::setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
 
 	if (driver->cmd_rpm == 0){
 		if (driver->R_rpm > 0){
+			setMaxRpm(rtu,1);
 			setTorque(rtu, driver, -toq);
-			while (driver->R_rpm > driver->cmd_rpm){
+			while (driver->R_rpm > driver->cmd_rpm + margin){
 				getRpm(rtu, driver);
 			}
 			setTorque(rtu, driver, 0);
 		}
 
 		else if (driver->R_rpm < 0){
+			setMaxRpm(rtu, 1);
 			setTorque(rtu, driver, toq);
-			while (driver->R_rpm < driver->cmd_rpm){
+			while (driver->R_rpm < driver->cmd_rpm - margin){
 				getRpm(rtu, driver);
 			}
 			setTorque(rtu, driver, 0);
 		}
 
 		else{
+			setMaxRpm(rtu, 1);
 			setTorque(rtu, driver, 0);
 		}
+
 	}
 
 	else if (driver->cmd_rpm * (driver->R_rpm) > 0){
@@ -249,11 +275,16 @@ void RS485::setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
 		else{
 			setMaxRpm(rtu, abs(driver->cmd_rpm));
 			setTorque(rtu, driver, -toq);
-			while (abs(driver->R_rpm) >= (abs(driver->cmd_rpm) + 20)){ // 20 is margin rpm
+			while (abs(driver->R_rpm) >= (abs(driver->cmd_rpm) + margin)){
 				getRpm(rtu, driver);
 			}
 			setTorque(rtu, driver, toq);
 		}
+
+		// else{
+		// 	setMaxRpm(rtu, abs(driver->cmd_rpm));
+		// 	setTorque(rtu, driver, toq);
+		// } 역토크 안 주고 자연 정지 테스트용
 	}
 
 	else if (driver->cmd_rpm * (driver->R_rpm) <= 0){
@@ -330,7 +361,7 @@ ssize_t RS485::initializeRS485()
 	cfsetispeed(&rs485_config, B115200);	// 입력 보드레이트
 	cfsetospeed(&rs485_config, B115200);	// 출력 보드레이트
 	rs485_config.c_cc[VTIME] = 0;
-	rs485_config.c_cc[VMIN] = 0;
+	rs485_config.c_cc[VMIN] = 0; // read 할 때 최소로 읽어올 character 수
 
 	tcflush(_rs485_fd, TCIFLUSH);		// 디스크립터 초기화
 	ret = tcsetattr(_rs485_fd, TCSANOW, &rs485_config);	// termios 구조체 설정을 디스크립터에 저장
@@ -373,8 +404,7 @@ void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t regis
 	setRTUPacket(rtu, device_address, 0x06, register_address, data, data_length);	// CRC를 제외한 RTU 패킷 설정
 	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);					// CRC 계산하여 RTU 패킷 완성
 	write(_rs485_fd, rtu, sizeof(*rtu));						// RTU 패킷 전송
-	//usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
-	usleep(310);
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
 
 	// function code 0x06으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
 	uint8_t buf[8];
@@ -386,8 +416,7 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 	setRTUPacket(rtu, rtu->_node_id, 0x03, register_address, (uint8_t*)&register_number, sizeof(register_number));
 	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
 	write(_rs485_fd, rtu, sizeof(*rtu));
-	//usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
-	usleep(310);
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
 
 	static uint8_t buf[9];					// 수신 값을 저장할 버퍼(2개를 읽으면 9바이트가 들어오므로 배열의 길이를 9로 설정함.)
 	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));	// read 함수로 읽는다.(ret에는 읽은 바이트 수가 저장됨.)
@@ -397,13 +426,17 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 {
-	return RS485::main(argc, argv);
+	// return RS485::main(argc, argv);
 
-	// RS485 rs485;
-	// rs485.initializeRS485();
-	// while(1)
-	// {
-
-	// }
-	// return 0;
+	RS485 rs485;
+	rs485.initializeRS485();
+	while(1)
+	{
+		//EDIT
+		rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::VELOCITY);
+		rs485.setMaxRpm(&rs485._rtu_broad, 200);
+		rs485.setRpm(&rs485._rtu_broad, &rs485._driver_broad, 100);
+		//
+	}
+	return 0;
 }

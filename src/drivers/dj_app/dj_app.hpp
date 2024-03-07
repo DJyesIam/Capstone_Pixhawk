@@ -107,8 +107,10 @@ public:
 	/* =====================================================================================================================*/
 
 	/* =============================================== 모터 관련 변수, 함수들 ==================================================*/
+	DriverState _driver_broad{0x00};  // EDIT
 	DriverState _driver_left{0x01};
 	DriverState _driver_right{0x02};
+
 
 	double _r_wheel;
 
@@ -129,7 +131,7 @@ public:
 	void getTorque(RTU* rtu, DriverState* driver);					// 두 모터의 토크 읽기
 
 	void setMaxRpm(RTU* rtu, uint16_t max_rpm);					// 모터드라이버의 최대 rpm 설정
-	void setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm);		// 토크 모드로 두 모터의 속도 제어
+	void setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm, int16_t margin);		// 토크 모드로 두 모터의 속도 제어
 
 	void setMaxLCurrent(RTU* rtu, uint16_t max_cur);				// 좌측 모터 최대 제한전류 설정
 	void setMaxRCurrent(RTU* rtu, uint16_t max_cur);				// 우측 모터 최대 제한전류 설정
@@ -146,6 +148,7 @@ public:
 	/* =====================================================================================================================*/
 
 	/* =============================================== 통신 관련 변수, 함수들 ==================================================*/
+	RTU _rtu_broad{0x00};			// EDIT
 	RTU _rtu_left{0x01};			// 앞바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 왼쪽 모터드라이버)
 	RTU _rtu_right{0x02};			// 뒷바퀴 모터드라이버 RTU 패킷(로봇 진행방향 기준 오른쪽 모터드라이버)
 
@@ -171,3 +174,8 @@ public:
 	perf_counter_t	_interval_perf{perf_alloc(PC_INTERVAL, MODULE_NAME": interval")};
 	/* =====================================================================================================================*/
 };
+
+// TODO
+// 브로드캐스트용 구조체 2개 만들어놓긴 했는데 이제 이걸 어떻게
+// 어떤 상황에서 써먹어야 할 지 궁리 좀 해봐야 할 거 같음
+// 여차하면 setRpmWToq 함수 마개조해야 할 수도

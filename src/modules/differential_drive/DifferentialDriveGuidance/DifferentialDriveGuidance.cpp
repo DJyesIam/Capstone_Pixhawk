@@ -81,7 +81,10 @@ void DifferentialDriveGuidance::computeGuidance(float yaw, float angular_velocit
 	case GuidanceState::TURNING:
 		desired_speed = 0.f;
 
-		if (fabsf(heading_error) < 0.05f) {
+		// EDIT
+		// if (fabsf(heading_error) < 0.05f) // original heading_error
+		if (fabsf(heading_error) < 0.08f)
+		{
 			_currentState = GuidanceState::DRIVING;
 		}
 
