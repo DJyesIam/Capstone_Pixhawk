@@ -373,7 +373,8 @@ void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t regis
 	setRTUPacket(rtu, device_address, 0x06, register_address, data, data_length);	// CRC를 제외한 RTU 패킷 설정
 	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);					// CRC 계산하여 RTU 패킷 완성
 	write(_rs485_fd, rtu, sizeof(*rtu));						// RTU 패킷 전송
-	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+	//usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+	usleep(310);
 
 	// function code 0x06으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
 	uint8_t buf[8];
@@ -385,7 +386,8 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 	setRTUPacket(rtu, rtu->_node_id, 0x03, register_address, (uint8_t*)&register_number, sizeof(register_number));
 	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);
 	write(_rs485_fd, rtu, sizeof(*rtu));
-	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+	//usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+	usleep(310);
 
 	static uint8_t buf[9];					// 수신 값을 저장할 버퍼(2개를 읽으면 9바이트가 들어오므로 배열의 길이를 9로 설정함.)
 	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));	// read 함수로 읽는다.(ret에는 읽은 바이트 수가 저장됨.)
