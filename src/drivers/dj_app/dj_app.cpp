@@ -421,7 +421,7 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 	static uint8_t buf[9];					// 수신 값을 저장할 버퍼(2개를 읽으면 9바이트가 들어오므로 배열의 길이를 9로 설정함.)
 	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));	// read 함수로 읽는다.(ret에는 읽은 바이트 수가 저장됨.)
 	if (ret <= 0) return;
-	_read_buf_address = buf + 3;		// buf+3에 해당하는 주소는 우리가 원하는 데이터가 있는 주소이다.
+	_read_buf_address = buf + 3;				// buf+3에 해당하는 주소는 우리가 원하는 데이터가 있는 주소이다.
 }
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
