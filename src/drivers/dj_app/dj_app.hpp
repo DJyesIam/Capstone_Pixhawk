@@ -2,17 +2,23 @@
 
 #include <lib/mixer_module/mixer_module.hpp>
 #include <px4_platform_common/module.h>
+#include <px4_platform_common/module_params.h>
+#include <px4_platform_common/time.h>
+#include <sys/select.h>
+#include <sys/ioctl.h>
+
 #include <lib/perf/perf_counter.h>
 #include <px4_platform_common/log.h>
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <uORB/Publication.hpp>
-#include <uORB/topics/wheel_encoders.h>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/parameter_update.h>
+
+#include <uORB/Publication.hpp>
+#include <uORB/topics/wheel_encoders.h>
 
 #define PI 3.1415
 
@@ -155,9 +161,15 @@ public:
 
 	const char* _port_name = "/dev/ttyS3";	// 디바이스 포트 이름(pixhawk UART 포트이름이 dev/ttyS3)
 	const int _baudrate = B115200;		// baudrate(모터드라이브의 default가 115200)
-	int _rs485_fd = 0;			// rs485 통신 디스크립터
+	// int _rs485_fd = 0;			// rs485 통신 디스크립터
 	bool _rs485_initialized = false;	// rs485 통신이 초기화되었는지를 저장하는 bool 변수
 	uint8_t* _read_buf_address;		// 모터드라이버에서 읽은 데이터 배열을 가리키는 포인터
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
+	int _rs485_fd{0};
+	fd_set _rs485_fd_set;
+	struct timeval _rs485_fd_timeout; // 최소 10ms
+	////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// uORB 토픽 선언(일단 roboclaw에 있는 거 넣었는데 필수인지는 모르겠음. 추후 테스트 예정)
 	uORB::SubscriptionData<actuator_armed_s> _actuator_armed_sub{ORB_ID(actuator_armed)};
