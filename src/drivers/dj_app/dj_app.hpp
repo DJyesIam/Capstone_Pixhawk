@@ -7,7 +7,6 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <limits.h>
 
 #include <uORB/Publication.hpp>
 #include <uORB/topics/wheel_encoders.h>
@@ -52,6 +51,7 @@ enum RegisterAddr : uint16_t
 	R_FB_TOQ = 0x20AE,
 
 // Control Word
+	UNDEFINED = 0x0000,
 	EMER_STOP = 0x0005,
 	ALRM_CLR = 0x0006,
 	ENABLE = 0x0008
@@ -120,6 +120,7 @@ public:
 	void setMode(RTU* rtu, DriverState* driver, Mode mode);				// 모터드라이버 모드 설정
 	Mode getMode(RTU* rtu);								// 모터드라이버 모드 읽기
 	void enableMotor(RTU* rtu, DriverState* driver);				// 모터드라이버 enable로 설정
+	void disableMotor(RTU* rtu, DriverState* driver);
 	void emergencyStopMotor(RTU* rtu, DriverState* driver);				// 모터드라이버 emergency stop 시키기
 	void clearAlarm(RTU* rtu);							// 모터드라이버 clear fault
 
@@ -131,7 +132,7 @@ public:
 	void getTorque(RTU* rtu, DriverState* driver);					// 두 모터의 토크 읽기
 
 	void setMaxRpm(RTU* rtu, uint16_t max_rpm);					// 모터드라이버의 최대 rpm 설정
-	void setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm, int16_t margin);		// 토크 모드로 두 모터의 속도 제어
+	void setRpmWToq(RTU* rtu, DriverState* driver, int16_t cmd_rpm, int16_t margin);// 토크 모드로 두 모터의 속도 제어
 
 	void setMaxLCurrent(RTU* rtu, uint16_t max_cur);				// 좌측 모터 최대 제한전류 설정
 	void setMaxRCurrent(RTU* rtu, uint16_t max_cur);				// 우측 모터 최대 제한전류 설정
@@ -163,10 +164,11 @@ public:
 	uORB::PublicationData<wheel_encoders_s> _wheel_encoders_pub{ORB_ID(wheel_encoders)};
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
-	ssize_t initializeRS485();															// RS485 통신 초기화
-	void setRTUPacket(RTU* rtu, uint8_t device_address, uint8_t function_code, uint16_t register_address, uint8_t* data, size_t data_length); 	// 원하는 값으로 패킷 설정
+	ssize_t initializeRS485();														 	// RS485 통신 초기화
+	void setRTUPacket(RTU* rtu, uint8_t device_address, uint8_t function_code, uint16_t register_address, uint8_t* data, size_t data_length); 	// RTU 패킷 설정
 	uint16_t calculateCRC(uint8_t* data, size_t data_length);											// CRC 계산
-	void writeSingleRegister(RTU* rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);			// 데이터 쓰기
+	void writeSingleRegister(RTU* rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);			// 데이터 한 개 쓰기
+	void writeRegisters(uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);					// 데이터 두 개 쓰기
 	void readRegisters(RTU* rtu, uint16_t register_address, uint16_t register_number);								// 데이터 읽기
 
 	// 왜인지 모르겠는데 pwm_out에서 쓰길래 추가함(나중에 빼고 테스트해볼 예정)

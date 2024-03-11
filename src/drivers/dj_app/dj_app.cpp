@@ -85,10 +85,6 @@ void RS485::Run()
 	perf_end(_cycle_perf);
 }
 
-// front 0 : 앞 왼바퀴
-// front 1 : 앞 오른바퀴
-// back 0 : 뒤 왼바퀴
-// back 1 : 뒤 오른바퀴
 // outputs[0] : 오른바퀴 출력
 // outputs[1] : 왼바퀴 출력
 bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
@@ -107,8 +103,7 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	// }
 	// 이거 응용해서 if(!_manual_drivind){} 이런식으로 구현해야 할 듯
 	if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
-    if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
-	//
+    	if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
 
 	if (stop_motors)
 	{
@@ -120,11 +115,11 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	}
 	else
 	{
-		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
-		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
-
 		outputs[0] -= 50;
 		outputs[1] -= 50;
+
+		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
+		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
 		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 15);
 		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
@@ -164,6 +159,13 @@ void RS485::enableMotor(RTU *rtu, DriverState* driver)
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 }
 
+void RS485::disableMotor(RTU *rtu, DriverState* driver)
+{
+	driver->enabled = false;
+	uint16_t disable = RegisterAddr::UNDEFINED;
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&disable, sizeof(disable));
+}
+
 void RS485::emergencyStopMotor(RTU *rtu, DriverState* driver)
 {
 	driver->enabled = false;
@@ -186,8 +188,9 @@ void RS485::setRpm(RTU* rtu, DriverState* driver, int16_t cmd_rpm)
 
 	driver->cmd_rpm = cmd_rpm;
 
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_RPM, (uint8_t*)&cmd_rpm, sizeof(cmd_rpm));
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_RPM, (uint8_t*)&cmd_rpm, sizeof(cmd_rpm));
+	int16_t rpm_arr[2];
+	rpm_arr[0] = cmd_rpm; rpm_arr[1] = cmd_rpm;
+	writeRegisters(rtu->_node_id, RegisterAddr::L_CMD_RPM, (uint8_t*)rpm_arr, sizeof(rpm_arr));
 }
 
 void RS485::getRpm(RTU* rtu, DriverState* driver)
@@ -211,8 +214,9 @@ void RS485::setTorque(RTU* rtu, DriverState* driver, int16_t toq)
 	// 모터드라이버가 enable 상태가 아니면 enable 설정
 	if (driver->enabled != true) enableMotor(rtu, driver);
 
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::L_CMD_TOQ, (uint8_t*)&toq, sizeof(toq));
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::R_CMD_TOQ, (uint8_t*)&toq, sizeof(toq));
+	int16_t toq_arr[2];
+	toq_arr[0] = toq; toq_arr[1] = toq;
+	writeRegisters(rtu->_node_id, RegisterAddr::L_CMD_TOQ, (uint8_t*)toq_arr, sizeof(toq_arr));
 }
 
 void RS485::getTorque(RTU* rtu, DriverState* driver)
@@ -394,8 +398,9 @@ uint16_t RS485::calculateCRC(uint8_t *data, size_t data_length)
 			if (LSB) crc ^= polynomial;
         	}
 	}
-	data[6] = crc & 0xFF;
-	data[7] = crc >> 8;
+	uint8_t crc_index = (data_length > 6) ? 11 : 6;		// 데이터 길이에 따라 CRC 값을 쓸 index를 바꾼다.
+	data[crc_index] = crc & 0xFF;
+	data[crc_index + 1] = crc >> 8;
 	return crc;
 }
 
@@ -407,6 +412,28 @@ void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t regis
 	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
 
 	// function code 0x06으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
+	uint8_t buf[8];
+	read(_rs485_fd, &buf, sizeof(buf));
+}
+
+// 해당 함수는 현재 2개의 레지스터에만 값을 쓸 수 있다.(3개 이상 불가능)
+void RS485::writeRegisters(uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length)
+{
+	// 기존에 만들어둔 RTU 패킷이 function Code 0x10의 패킷과는 맞지 않으므로, 함수 내에서 임시 패킷을 만들어 전송한다.
+	// calculateCRC 위의 부분이 writeSingleRegister의 setRTUPacket 함수와 같은 기능을 하는 부분이고, 이하로는 writeSingleRegister와 동일하다.
+	uint8_t packet[13];
+	packet[0] = device_address;
+	packet[1] = 0x10;
+	packet[2] = register_address >> 8;
+	packet[3] = register_address & 0xFF;
+	packet[4] = 0x00; packet[5] = 0x02; packet[6] = 0x04;
+	for (size_t i = 0; i < data_length; i++)
+		packet[i + 7] = data[data_length - 1 - i];
+	calculateCRC(packet, sizeof(packet) - 2);
+	write(_rs485_fd, packet, sizeof(packet));
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+
+	// function code 0x10으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
 	uint8_t buf[8];
 	read(_rs485_fd, &buf, sizeof(buf));
 }
@@ -426,17 +453,17 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 {
-	// return RS485::main(argc, argv);
+	return RS485::main(argc, argv);
 
-	RS485 rs485;
-	rs485.initializeRS485();
-	while(1)
-	{
-		//EDIT
-		rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::VELOCITY);
-		rs485.setMaxRpm(&rs485._rtu_broad, 200);
-		rs485.setRpm(&rs485._rtu_broad, &rs485._driver_broad, 100);
-		//
-	}
-	return 0;
+	// RS485 rs485;
+	// rs485.initializeRS485();
+	// while(1)
+	// {
+	// 	//EDIT
+	// 	rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::VELOCITY);
+	// 	rs485.setMaxRpm(&rs485._rtu_broad, 200);
+	// 	rs485.setRpm(&rs485._rtu_broad, &rs485._driver_broad, 100);
+	// 	//
+	// }
+	// return 0;
 }
