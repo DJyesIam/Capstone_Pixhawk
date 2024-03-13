@@ -27,6 +27,10 @@ int RS485::task_spawn(int argc, char *argv[])
 	_object.store(instance);
 	_task_id = task_id_is_work_queue;
 	instance->ScheduleNow();
+
+	instance->initializeRS485(); instance->_rs485_initialized = true;
+	instance->initializeDrivers();
+
 	return 0;
 }
 
@@ -110,23 +114,31 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		// setRpm(&_rtu_left, &_driver_left, 0);
 		// setRpm(&_rtu_right, &_driver_right, 0);
 
-		setRpm(&_rtu_broad, &_driver_broad, 0);
+		// setRpm(&_rtu_broad, &_driver_broad, 0);
 
-		// setRpmWToq(&_rtu_left, &_driver_left, 0, 15);
+		// setRpmWToq(&_rtu_left, &_driver_left, 0, 20);
 		// setRpmWToq(&_rtu_right, &_driver_right, 0, 20);
+
+		setRpmWToq(&_rtu_broad, &_driver_broad, 0, 0);
 	}
 	else
 	{
 		outputs[0] -= 50;
 		outputs[1] -= 50;
 
-		setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
-		setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
+		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
+		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
-		// setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 15);
-		// setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
+		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 20);
+		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
 	}
 	return true;
+}
+
+void RS485::initializeDrivers()
+{
+	setMode(&_rtu_broad, &_driver_broad, Mode::TORQUE);
+	enableMotor(&_rtu_broad, &_driver_broad);
 }
 
 double RS485::rpmToRadPerSec(double rpm)
@@ -144,6 +156,7 @@ double RS485::rpmToLinear(double rpm)
 void RS485::setMode(RTU* rtu, DriverState* driver, Mode mode)
 {
 	driver->mode = mode;
+	if (driver->node_id == 0x00) {_driver_left.mode = mode; _driver_right.mode = mode;}
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
 }
 
@@ -157,6 +170,7 @@ Mode RS485::getMode(RTU* rtu)
 void RS485::enableMotor(RTU *rtu, DriverState* driver)
 {
 	driver->enabled = true;
+	if (driver->node_id == 0x00) {_driver_left.enabled = true; _driver_right.enabled = true;}
 	uint16_t enable = RegisterAddr::ENABLE;
 	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 }
@@ -475,7 +489,7 @@ void RS485::readRegisters(RTU* rtu, uint16_t register_address, uint16_t register
 	static uint8_t buf[9];					// 수신 값을 저장할 버퍼(2개를 읽으면 9바이트가 들어오므로 배열의 길이를 9로 설정함.)
 	ssize_t ret = read(_rs485_fd, &buf, sizeof(buf));	// read 함수로 읽는다.(ret에는 읽은 바이트 수가 저장됨.)
 	if (ret <= 0) return;
-	_read_buf_address = buf + 3;		// buf+3에 해당하는 주소는 우리가 원하는 데이터가 있는 주소이다.
+	_read_buf_address = buf + 3;				// buf+3에 해당하는 주소는 우리가 원하는 데이터가 있는 주소이다.
 }
 
 extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
@@ -491,6 +505,8 @@ extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 	// 	rs485.setMaxRpm(&rs485._rtu_broad, 200);
 	// 	rs485.setRpm(&rs485._rtu_broad, &rs485._driver_broad, 100);
 	// 	//
+	// 	rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::TORQUE);
+	// 	rs485.enableMotor(&rs485._rtu_broad, &rs485._driver_broad);
 	// }
 	// return 0;
 }

@@ -117,8 +117,9 @@ public:
 	DriverState _driver_left{0x01};
 	DriverState _driver_right{0x02};
 
-
 	double _r_wheel;
+
+	void initializeDrivers();
 
 	double rpmToRadPerSec(double rpm);						// rev/m 값을 rad/s로 변환
 	double rpmToLinear(double rpm);							// rpm 값을 선속도 값으로 변환
