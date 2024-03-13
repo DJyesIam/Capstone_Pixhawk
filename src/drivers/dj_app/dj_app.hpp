@@ -151,6 +151,7 @@ public:
 
 	void setNodeID(RTU* rtu, uint16_t address);					// 모터드라이버 Node ID 새로 설정(주행중에는 사용하지 말 것)
 
+
 	// 아마 얘가 실질적으로 모터를 돌리는 인스턴스로 추측된다.
 	MixingOutput _mixing_output{"DJ", MAX_ACTUATORS, *this, MixingOutput::SchedulingPolicy::Auto, true};
 	/* =====================================================================================================================*/
@@ -164,6 +165,12 @@ public:
 	const int _baudrate = B115200;		// baudrate(모터드라이브의 default가 115200)
 	// int _rs485_fd = 0;			// rs485 통신 디스크립터
 	bool _rs485_initialized = false;	// rs485 통신이 초기화되었는지를 저장하는 bool 변수
+
+
+	bool _motor_initialized = false;
+
+
+
 	uint8_t* _read_buf_address;		// 모터드라이버에서 읽은 데이터 배열을 가리키는 포인터
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////
