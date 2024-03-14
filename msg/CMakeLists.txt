@@ -99,6 +99,7 @@ set(msg_files
 	FollowTargetStatus.msg
 	GeneratorStatus.msg
 	GeofenceResult.msg
+	GeofenceStatus.msg
 	GimbalControls.msg
 	GimbalDeviceAttitudeStatus.msg
 	GimbalDeviceInformation.msg
@@ -153,6 +154,10 @@ set(msg_files
 	OrbTest.msg
 	OrbTestLarge.msg
 	OrbTestMedium.msg
+	ParameterResetRequest.msg
+	ParameterSetUsedRequest.msg
+	ParameterSetValueRequest.msg
+	ParameterSetValueResponse.msg
 	ParameterUpdate.msg
 	Ping.msg
 	PositionControllerLandingStatus.msg

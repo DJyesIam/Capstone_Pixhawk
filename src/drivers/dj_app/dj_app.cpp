@@ -27,6 +27,13 @@ int RS485::task_spawn(int argc, char *argv[])
 	_object.store(instance);
 	_task_id = task_id_is_work_queue;
 	instance->ScheduleNow();
+<<<<<<< HEAD
+=======
+
+	instance->initializeRS485(); instance->_rs485_initialized = true;
+	// instance->initializeDrivers(); instance->_motor_initialized = true;
+
+>>>>>>> ffe46d18a9d2e38001acb6fa8e4f4251f4e58df5
 	return 0;
 }
 
@@ -71,10 +78,17 @@ void RS485::Run()
 		_rs485_initialized = true;
 	}
 
+<<<<<<< HEAD
 	if (!_drivers_initialized) {
 		initializeDrivers();
 		_drivers_initialized = true;
 	}
+=======
+	// if (!_motor_initialized) {
+	// 	initializeDrivers();
+	// 	_motor_initialized = true;
+	// }
+>>>>>>> ffe46d18a9d2e38001acb6fa8e4f4251f4e58df5
 
 	_mixing_output.update();
 
@@ -107,15 +121,16 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	// 	}
 	// }
 	// 이거 응용해서 if(!_manual_drivind){} 이런식으로 구현해야 할 듯
+	
 	if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
-    	if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
+    if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
 
 	if (stop_motors)
 	{
 		// setRpm(&_rtu_left, &_driver_left, 0);
 		// setRpm(&_rtu_right, &_driver_right, 0);
 
-		// setRpm(&_rtu_broad, &_driver_broad, 0);
+		setRpm(&_rtu_broad, &_driver_broad, 0);
 
 		setRpmWToq(&_rtu_left, &_driver_left, 0, 0);
 		setRpmWToq(&_rtu_right, &_driver_right, 0, 0);
@@ -127,11 +142,16 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		outputs[0] -= 50;
 		outputs[1] -= 50;
 
-		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
-		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
+		setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
+		setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
+<<<<<<< HEAD
 		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 0);
 		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 0);
+=======
+		// setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 20);
+		// setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
+>>>>>>> ffe46d18a9d2e38001acb6fa8e4f4251f4e58df5
 	}
 	return true;
 }
@@ -158,10 +178,16 @@ double RS485::rpmToLinear(double rpm)
 
 void RS485::setMode(RTU* rtu, DriverState* driver, Mode mode)
 {
+<<<<<<< HEAD
 	driver->mode = mode;
 	if (driver->node_id == 0x00) {_driver_left.mode = mode; _driver_right.mode = mode;}
 	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
 	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
+=======
+	// driver->mode = mode;
+	// if (driver->node_id == 0x00) {_driver_left.mode = mode; _driver_right.mode = mode; _driver_broad.mode = mode;}
+	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
+>>>>>>> ffe46d18a9d2e38001acb6fa8e4f4251f4e58df5
 }
 
 Mode RS485::getMode(RTU* rtu)
@@ -173,8 +199,8 @@ Mode RS485::getMode(RTU* rtu)
 
 void RS485::enableMotor(RTU *rtu, DriverState* driver)
 {
-	driver->enabled = true;
-	if (driver->node_id == 0x00) {_driver_left.enabled = true; _driver_right.enabled = true;}
+	// driver->enabled = true;
+	// if (driver->node_id == 0x00) {_driver_left.enabled = true; _driver_right.enabled = true; _driver_broad.enabled = true;}
 	uint16_t enable = RegisterAddr::ENABLE;
 	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
