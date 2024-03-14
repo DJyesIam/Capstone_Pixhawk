@@ -119,6 +119,8 @@ public:
 
 	double _r_wheel;
 
+	bool _drivers_initialized = false;
+
 	void initializeDrivers();
 
 	double rpmToRadPerSec(double rpm);						// rev/m 값을 rad/s로 변환
@@ -181,6 +183,7 @@ public:
 	void setRTUPacket(RTU* rtu, uint8_t device_address, uint8_t function_code, uint16_t register_address, uint8_t* data, size_t data_length); 	// RTU 패킷 설정
 	uint16_t calculateCRC(uint8_t* data, size_t data_length);											// CRC 계산
 	void writeSingleRegister(RTU* rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);			// 데이터 한 개 쓰기
+	void writeSingleRegisterUsingUsleep(RTU* rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);		// 데이터 한 개 쓰기(usleep() 함수 사용)
 	void writeRegisters(uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length);					// 데이터 두 개 쓰기
 	void readRegisters(RTU* rtu, uint16_t register_address, uint16_t register_number);								// 데이터 읽기
 

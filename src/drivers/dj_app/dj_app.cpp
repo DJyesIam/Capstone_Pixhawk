@@ -27,10 +27,6 @@ int RS485::task_spawn(int argc, char *argv[])
 	_object.store(instance);
 	_task_id = task_id_is_work_queue;
 	instance->ScheduleNow();
-
-	instance->initializeRS485(); instance->_rs485_initialized = true;
-	instance->initializeDrivers();
-
 	return 0;
 }
 
@@ -75,6 +71,11 @@ void RS485::Run()
 		_rs485_initialized = true;
 	}
 
+	if (!_drivers_initialized) {
+		initializeDrivers();
+		_drivers_initialized = true;
+	}
+
 	_mixing_output.update();
 
 	if (_parameter_update_sub.updated()) {
@@ -116,10 +117,10 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 
 		// setRpm(&_rtu_broad, &_driver_broad, 0);
 
-		// setRpmWToq(&_rtu_left, &_driver_left, 0, 20);
-		// setRpmWToq(&_rtu_right, &_driver_right, 0, 20);
+		setRpmWToq(&_rtu_left, &_driver_left, 0, 0);
+		setRpmWToq(&_rtu_right, &_driver_right, 0, 0);
 
-		setRpmWToq(&_rtu_broad, &_driver_broad, 0, 0);
+		// setRpmWToq(&_rtu_broad, &_driver_broad, 0, 0);
 	}
 	else
 	{
@@ -129,16 +130,18 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
 		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
-		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 20);
-		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 20);
+		setRpmWToq(&_rtu_left, &_driver_left, (int16_t)outputs[1], 0);
+		setRpmWToq(&_rtu_right, &_driver_right, -(int16_t)outputs[0], 0);
 	}
 	return true;
 }
 
 void RS485::initializeDrivers()
 {
-	setMode(&_rtu_broad, &_driver_broad, Mode::TORQUE);
-	enableMotor(&_rtu_broad, &_driver_broad);
+	setMode(&_rtu_left, &_driver_left, Mode::TORQUE);
+	setMode(&_rtu_right, &_driver_right, Mode::TORQUE);
+	enableMotor(&_rtu_left, &_driver_left);
+	enableMotor(&_rtu_right, &_driver_right);
 }
 
 double RS485::rpmToRadPerSec(double rpm)
@@ -157,7 +160,8 @@ void RS485::setMode(RTU* rtu, DriverState* driver, Mode mode)
 {
 	driver->mode = mode;
 	if (driver->node_id == 0x00) {_driver_left.mode = mode; _driver_right.mode = mode;}
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
+	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
+	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
 }
 
 Mode RS485::getMode(RTU* rtu)
@@ -172,7 +176,9 @@ void RS485::enableMotor(RTU *rtu, DriverState* driver)
 	driver->enabled = true;
 	if (driver->node_id == 0x00) {_driver_left.enabled = true; _driver_right.enabled = true;}
 	uint16_t enable = RegisterAddr::ENABLE;
-	writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
+	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
+	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
+
 }
 
 void RS485::disableMotor(RTU *rtu, DriverState* driver)
@@ -445,6 +451,19 @@ void RS485::writeSingleRegister(RTU *rtu, uint8_t device_address, uint16_t regis
 	read(_rs485_fd, &buf, sizeof(buf));
 }
 
+void RS485::writeSingleRegisterUsingUsleep(RTU *rtu, uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length)
+{
+	setRTUPacket(rtu, device_address, 0x06, register_address, data, data_length);	// CRC를 제외한 RTU 패킷 설정
+	calculateCRC((uint8_t*)rtu, sizeof(*rtu) - 2);					// CRC 계산하여 RTU 패킷 완성
+	write(_rs485_fd, rtu, sizeof(*rtu));						// RTU 패킷 전송
+
+	usleep(5000);	// delay를 주지 않으면 값 전송이 제대로 안 됨.
+
+	// function code 0x06으로 write를 해도 모터드라이버에서 응답을 하여 버퍼에 쌓이므로, 이를 제거한다.
+	uint8_t buf[8];
+	read(_rs485_fd, &buf, sizeof(buf));
+}
+
 // 해당 함수는 현재 2개의 레지스터에만 값을 쓸 수 있다.(3개 이상 불가능)
 void RS485::writeRegisters(uint8_t device_address, uint16_t register_address, uint8_t* data, size_t data_length)
 {
@@ -498,15 +517,10 @@ extern "C" __EXPORT int dj_app_main(int argc, char *argv[])
 
 	// RS485 rs485;
 	// rs485.initializeRS485();
-	// while(1)
-	// {
-	// 	//EDIT
-	// 	rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::VELOCITY);
-	// 	rs485.setMaxRpm(&rs485._rtu_broad, 200);
-	// 	rs485.setRpm(&rs485._rtu_broad, &rs485._driver_broad, 100);
-	// 	//
-	// 	rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::TORQUE);
-	// 	rs485.enableMotor(&rs485._rtu_broad, &rs485._driver_broad);
-	// }
+	// rs485.setMode(&rs485._rtu_broad, &rs485._driver_broad, Mode::TORQUE);
+	// Mode mode_left = rs485.getMode(&rs485._rtu_left);
+	// Mode mode_right = rs485.getMode(&rs485._rtu_right);
+	// PX4_INFO("%d  %d\n", mode_left, mode_right);
+
 	// return 0;
 }
