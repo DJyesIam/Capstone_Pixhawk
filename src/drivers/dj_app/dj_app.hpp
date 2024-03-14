@@ -121,7 +121,7 @@ public:
 
 	bool _drivers_initialized = false;
 
-	void initializeDrivers();
+	void initializeDrivers();							// 모터드라이버 토크 모드, enable로 설정
 
 	double rpmToRadPerSec(double rpm);						// rev/m 값을 rad/s로 변환
 	double rpmToLinear(double rpm);							// rpm 값을 선속도 값으로 변환
