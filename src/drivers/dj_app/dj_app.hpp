@@ -16,6 +16,7 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/vehicle_control_mode.h>
 
 #include <uORB/Publication.hpp>
 #include <uORB/topics/wheel_encoders.h>
@@ -119,9 +120,12 @@ public:
 
 	double _r_wheel;
 
-	bool _drivers_initialized = false;
+	bool _drivers_initialized = false;						// 모터드라이버 모드, enable 설정되었는지 저장하는 변수
 
-	void initializeDrivers();
+	bool _manual_driving = false;							// Manual 모드면 true
+	bool _mission_driving = false;							// Mission 모드면 true
+
+	void initializeDrivers();							// 모터드라이버 토크모드, enable 설정
 
 	double rpmToRadPerSec(double rpm);						// rev/m 값을 rad/s로 변환
 	double rpmToLinear(double rpm);							// rpm 값을 선속도 값으로 변환
@@ -176,8 +180,9 @@ public:
 
 	// uORB 토픽 선언(일단 roboclaw에 있는 거 넣었는데 필수인지는 모르겠음. 추후 테스트 예정)
 	uORB::SubscriptionData<actuator_armed_s> _actuator_armed_sub{ORB_ID(actuator_armed)};
-	uORB::PublicationData<wheel_encoders_s> _wheel_encoders_pub{ORB_ID(wheel_encoders)};
 	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
+	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
+	uORB::PublicationData<wheel_encoders_s> _wheel_encoders_pub{ORB_ID(wheel_encoders)};
 
 	ssize_t initializeRS485();														 	// RS485 통신 초기화
 	void setRTUPacket(RTU* rtu, uint8_t device_address, uint8_t function_code, uint16_t register_address, uint8_t* data, size_t data_length); 	// RTU 패킷 설정

@@ -87,6 +87,15 @@ void RS485::Run()
 	_actuator_armed_sub.update();
 	_mixing_output.updateSubscriptions(true);
 
+	if (_vehicle_control_mode_sub.updated()) {
+		vehicle_control_mode_s vehicle_control_mode{};
+
+		if (_vehicle_control_mode_sub.copy(&vehicle_control_mode)) {
+			_manual_driving = vehicle_control_mode.flag_control_manual_enabled;
+			_mission_driving = vehicle_control_mode.flag_control_auto_enabled;
+		}
+	}
+
 	perf_end(_cycle_perf);
 }
 
@@ -95,20 +104,16 @@ void RS485::Run()
 bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 			   unsigned num_outputs, unsigned num_control_groups_updated)
 {
-	// EDIT & TODO
-	// 엄청 간단하게 임시로 짜놓은 데드존 코드
-	// 제대로 짤려면 #include <uORB/topics/vehicle_control_mode.h> 하고
-	// if (_vehicle_control_mode_sub.updated()) {
-	// 	vehicle_control_mode_s vehicle_control_mode{};
-
-	// 	if (_vehicle_control_mode_sub.copy(&vehicle_control_mode)) {
-	// 		_manual_driving = vehicle_control_mode.flag_control_manual_enabled;
-	// 		_mission_driving = vehicle_control_mode.flag_control_auto_enabled;
-	// 	}
-	// }
-	// 이거 응용해서 if(!_manual_drivind){} 이런식으로 구현해야 할 듯
 	if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
     	if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
+
+	if (_manual_driving == true)	// Manual 모드인 경우 후진, 제자리 회전을 위해 오프셋 추가
+	{
+		outputs[0] -= 50;
+		outputs[1] -= 50;
+ 	}
+
+	else if (_mission_driving != true) {stop_motors = true;}	// Manual도 Mission도 아닌 경우 모터 정지
 
 	if (stop_motors)
 	{
@@ -124,9 +129,6 @@ bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 	}
 	else
 	{
-		outputs[0] -= 50;
-		outputs[1] -= 50;
-
 		// setRpm(&_rtu_left, &_driver_left, (int16_t)outputs[1]);
 		// setRpm(&_rtu_right, &_driver_right, -(int16_t)outputs[0]);
 
@@ -160,7 +162,6 @@ void RS485::setMode(RTU* rtu, DriverState* driver, Mode mode)
 {
 	driver->mode = mode;
 	if (driver->node_id == 0x00) {_driver_left.mode = mode; _driver_right.mode = mode;}
-	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
 	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::OPR_MODE, (uint8_t*)&mode, sizeof(mode));
 }
 
@@ -176,7 +177,6 @@ void RS485::enableMotor(RTU *rtu, DriverState* driver)
 	driver->enabled = true;
 	if (driver->node_id == 0x00) {_driver_left.enabled = true; _driver_right.enabled = true;}
 	uint16_t enable = RegisterAddr::ENABLE;
-	// writeSingleRegister(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 	writeSingleRegisterUsingUsleep(rtu, rtu->_node_id, RegisterAddr::CONTROL_REG, (uint8_t*)&enable, sizeof(enable));
 
 }
@@ -372,7 +372,7 @@ ssize_t RS485::initializeRS485()
 	_rs485_fd_timeout = { .tv_sec = 0, .tv_usec = TIMEOUT_US };
 
 	// _rs485_fd = open(_port_name, O_RDWR | O_NOCTTY | O_NONBLOCK);	// rs485 디스크립터를 연다.
-	_rs485_fd = open(_port_name, O_RDWR | O_NOCTTY );	// rs485 디스크립터를 연다.
+	_rs485_fd = open(_port_name, O_RDWR | O_NOCTTY );			// rs485 디스크립터를 연다.
 	if (_rs485_fd < 0) return ERROR;
 
 	ssize_t ret = 0;
@@ -390,7 +390,7 @@ ssize_t RS485::initializeRS485()
 	cfsetispeed(&rs485_config, B115200);	// 입력 보드레이트
 	cfsetospeed(&rs485_config, B115200);	// 출력 보드레이트
 	// rs485_config.c_cc[VTIME] = 0;
-	// rs485_config.c_cc[VMIN] = 0; // read 할 때 최소로 읽어올 character 수
+	// rs485_config.c_cc[VMIN] = 0; 	// read 할 때 최소로 읽어올 character 수
 
 	tcflush(_rs485_fd, TCIFLUSH);		// 디스크립터 초기화
 	ret = tcsetattr(_rs485_fd, TCSANOW, &rs485_config);	// termios 구조체 설정을 디스크립터에 저장
