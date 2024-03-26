@@ -136,6 +136,10 @@ void DifferentialDrive::Run()
 
 	_differential_drive_control.control(dt);
 	_differential_drive_kinematics.allocate();
+
+	// EDIT
+	_differential_drive_guidance.dbg_ind.timestamp = now;
+	orb_publish(ORB_ID(debug_value), _differential_drive_guidance.pub_dbg_ind, &_differential_drive_guidance.dbg_ind);
 }
 
 int DifferentialDrive::task_spawn(int argc, char *argv[])

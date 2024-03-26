@@ -42,6 +42,10 @@ DifferentialDriveGuidance::DifferentialDriveGuidance(ModuleParams *parent) : Mod
 	updateParams();
 
 	pid_init(&_heading_p_controller, PID_MODE_DERIVATIV_NONE, 0.001f);
+
+	//EDIT
+	dbg_ind.ind = 0;
+	dbg_ind.value = 0.;
 }
 
 void DifferentialDriveGuidance::computeGuidance(float yaw, float angular_velocity, float dt)
@@ -106,6 +110,9 @@ void DifferentialDriveGuidance::computeGuidance(float yaw, float angular_velocit
 		heading_error = 0.f;
 		angular_velocity = 0.f;
 		_desired_angular_velocity = 0.f;
+
+		// EDIT
+		dbg_ind.ind++;
 		break;
 	}
 

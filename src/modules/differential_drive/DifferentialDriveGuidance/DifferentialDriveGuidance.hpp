@@ -52,6 +52,8 @@
 
 #include <lib/pid/pid.h>
 
+// EDIT
+#include <uORB/topics/debug_value.h>
 
 /**
  * @brief Enum class for the different states of guidance.
@@ -101,6 +103,10 @@ public:
 	 * @return The set maximum angular velocity in rad/s.
 	 */
 	float setMaxAngularVelocity(float max_angular_velocity) { return _max_angular_velocity = max_angular_velocity; }
+
+	// EDIT
+	struct debug_value_s dbg_ind;
+	orb_advert_t pub_dbg_ind = orb_advertise(ORB_ID(debug_value), &dbg_ind);
 
 protected:
 	/**

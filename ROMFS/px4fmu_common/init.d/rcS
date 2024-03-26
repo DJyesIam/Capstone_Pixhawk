@@ -550,6 +550,7 @@ else
 	fi
 
 dj_app start
+px4_mavlink_debug start
 #
 # End of autostart.
 #
