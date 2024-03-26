@@ -104,14 +104,24 @@ void RS485::Run()
 bool RS485::updateOutputs(bool stop_motors, uint16_t outputs[MAX_ACTUATORS],
 			   unsigned num_outputs, unsigned num_control_groups_updated)
 {
-	if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
-    	if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
 
-	if (_manual_driving == true)	// Manual 모드인 경우 후진, 제자리 회전을 위해 오프셋 추가
+
+	if (_manual_driving == true)	// Manual Mode인 경우
 	{
+		// Dead Zone 기능 추가
+		if (outputs[0] >= 30 && outputs[0] <= 70) {stop_motors = true;}
+    		if (outputs[1] >= 30 && outputs[1] <= 70) {stop_motors = true;}
+		// 후진, 제자리 회전을 위해 오프셋 추가
 		outputs[0] -= 50;
 		outputs[1] -= 50;
  	}
+
+	else if (_mission_driving == true)	// Mission Mode인 경우
+	{
+		// 한 쪽만 속도가 0인 경우 -> 회전하려는 것이므로 반대쪽의 속도에 -를 곱한 값을 복사해서 제자리 회전하게 한다.
+		if (outputs[0] == 0 && outputs[1] != 0) outputs[0] = -outputs[1];
+		if (outputs[1] == 0 && outputs[0] != 0) outputs[1] = -outputs[0];
+	}
 
 	else if (_mission_driving != true) {stop_motors = true;}	// Manual도 Mission도 아닌 경우 모터 정지
 
