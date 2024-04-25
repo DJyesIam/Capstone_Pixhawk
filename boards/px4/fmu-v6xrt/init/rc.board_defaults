@@ -16,6 +16,20 @@ param set-default SENS_EN_INA238 0
 param set-default SENS_EN_INA228 0
 param set-default SENS_EN_INA226 1
 
+
+######## 여기 수정하면 파라미터 적용 가능 ################
+param set-default MAV_2_FORARD 1
+param set-default UXRCE_DDS_CFG 1000
+param set-default UXRCE_DDS_AG_IP -1062731775 # 192.168.0.1
+param set-default GPS_1_CONFIG 202 # GPS2
+param set-default GPS_1_GNSS 31
+param set-default GPS_1_PROTOCOL 6 #nmea
+param set-default SER_GPS2_BAUD 115200
+
+# param set-default 작성 후 뒤에 파라미터 값 추가
+# 물론 Advanced settings, manual entry 값으로
+####################################################
+
 safety_button start
 
 if param greater -s UAVCAN_ENABLE 0
